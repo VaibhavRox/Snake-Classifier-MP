@@ -1,0 +1,26 @@
+# Dataset
+Miniproject-Dataset/
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDES
+.vscode/
+.idea/
+
+# Misc
+.DS_Store
+*.log
+prompt.md
+*.pdf
