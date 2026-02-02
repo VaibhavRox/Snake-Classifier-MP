@@ -6,11 +6,11 @@ from tqdm import tqdm
 from src.utils.config import DATASET_PATH, PROCESSED_DATA_PATH
 from src.features.extractors import extract_all_features
 
-def process_dataset(max_images_per_class=20, max_classes=20):
+def process_dataset(max_images_per_class=None, max_classes=None):
     """
     Iterates through the dataset, extracts features, and saves them.
-    max_images_per_class: Limit to save time during development.
-    max_classes: Limit number of species to process for demo.
+    max_images_per_class: Limit to save time during development (None for all).
+    max_classes: Limit number of species to process for demo (None for all).
     """
     if not os.path.exists(PROCESSED_DATA_PATH):
         os.makedirs(PROCESSED_DATA_PATH)
@@ -34,7 +34,8 @@ def process_dataset(max_images_per_class=20, max_classes=20):
         image_files = [f for f in os.listdir(species_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
         
         # Limit images per class
-        image_files = image_files[:max_images_per_class]
+        if max_images_per_class:
+            image_files = image_files[:max_images_per_class]
         
         for img_file in image_files:
             img_path = os.path.join(species_dir, img_file)
@@ -61,5 +62,5 @@ def process_dataset(max_images_per_class=20, max_classes=20):
     print(f"Data saved to {PROCESSED_DATA_PATH}")
 
 if __name__ == "__main__":
-    # You can adjust max_images_per_class here
-    process_dataset(max_images_per_class=10, max_classes=20) 
+    # Process all data by default for production training
+    process_dataset(max_images_per_class=None, max_classes=None)

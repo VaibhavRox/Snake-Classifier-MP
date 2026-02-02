@@ -12,9 +12,14 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from src.utils.config import PROCESSED_DATA_PATH, RANDOM_SEED, TEST_SPLIT
+from src.features.pipeline import process_dataset
 
 def load_data():
     print("Loading data...")
+    if not os.path.exists(os.path.join(PROCESSED_DATA_PATH, "features.npy")):
+        print("Processed data not found. Running pipeline on FULL dataset...")
+        process_dataset(max_images_per_class=None, max_classes=None)
+        
     try:
         X = np.load(os.path.join(PROCESSED_DATA_PATH, "features.npy"))
         y = np.load(os.path.join(PROCESSED_DATA_PATH, "labels.npy"))
@@ -22,7 +27,7 @@ def load_data():
         print(f"Data Loaded: {X.shape} samples")
         return X, y, label_names
     except FileNotFoundError:
-        print("Data not found. Run pipeline.py first.")
+        print("Error loading data even after pipeline run.")
         return None, None, None
 
 def train_models():
