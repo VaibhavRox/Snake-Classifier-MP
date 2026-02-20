@@ -7,3 +7,5 @@ scikit-learn
 joblib
 matplotlib
 streamlit
+# Optional — required only for model_type="lgbm" in train.py
+lightgbm

@@ -1,65 +1,132 @@
 # 🐍 AI Snake Species Classifier
 
-This project is an AI-powered tool designed to classify snake species from images using **Classical Machine Learning** techniques. It identifies top predictions and provides crucial safety assessments (venomous vs. non-venomous).
+AI-powered snake species classifier (1,686 classes) using **Classical Machine Learning** — HOG + LBP + HSV features with LinearSVC or Logistic Regression. Includes venomous/non-venomous safety assessment and a Streamlit web UI.
 
 ## 🚀 Features
 
-- **Multi-Feature Extraction**: Utilizes Histogram of Oriented Gradients (HOG), Local Binary Patterns (LBP), and HSV color histograms for robust image analysis.
-- **Classical ML Models**: capable of using Random Forest, Linear SVM, and KNN classifiers.
-- **Safety First**: Includes a "Safety Gate" system that flags low-confidence predictions as "UNKNOWN" and clearly warns users about venomous species.
-- **Interactive UI**: Built with Streamlit for easy image uploading and real-time inference.
+- **Multi-feature extraction** — HOG, LBP, HSV colour histograms (individually selectable)
+- **No data leakage** — stratified split performed *before* scaling and PCA
+- **LinearSVC / Logistic Regression / LightGBM** — no RandomForest memory crashes
+- **Top-1 and Top-5 accuracy** reported after training
+- **3-fold StratifiedKFold** cross-validation
+- **Safety gate** — flags venomous species and low-confidence predictions as UNKNOWN
+- **Streamlit UI** for real-time inference
 
-## 🛠️ Installation
+---
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/VaibhavRox/Miniproject-AI-based-Snake-Classification.git
-    cd Miniproject-AI-based-Snake-Classification
-    ```
+## 🛠️ Setup (on any machine)
 
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+### 1. Clone
+```bash
+git clone https://github.com/VaibhavRox/Miniproject-AI-based-Snake-Classification.git
+cd Miniproject-AI-based-Snake-Classification/Snake-Classifier-MP
+```
 
-3.  **Prepare the Dataset (if training):**
-    *   Ensure your dataset is placed in `Miniproject-Dataset/`.
-    *   The code expects a structure compatible with the training scripts in `src/models/train.py`.
+### 2. Install dependencies
+```bash
+pip install -r requirements.txt
+```
 
-## 🏃 Usage
+### 3. Point to your dataset
+The dataset is **not** included in the repo (it's in `.gitignore`).
+Tell the code where your dataset lives via an environment variable:
 
-### Running the Web App
-To start the interactive web interface:
+```bash
+# macOS / Linux
+export SNAKE_DATASET_PATH=/path/to/your/dataset
+
+# Windows PowerShell
+$env:SNAKE_DATASET_PATH = "C:\path\to\your\dataset"
+```
+
+Expected dataset structure:
+```
+<SNAKE_DATASET_PATH>/
+├── species_name_1/
+│   ├── img001.jpg
+│   └── ...
+├── species_name_2/
+│   └── ...
+└── ...
+```
+
+---
+
+## 🏃 Training
+
+```bash
+python -m src.models.train
+```
+
+This runs the full pipeline:
+```
+Load data → Stratified split (80/20) → StandardScaler → PCA (300 components)
+→ 3-fold CV → Train LinearSVC → Top-1 / Top-5 accuracy → Save artifacts
+```
+
+Artifacts are saved to `src/models/artifacts/`:
+- `scaler.pkl`
+- `pca.pkl`
+- `model.pkl`
+- `label_names.pkl`
+
+### Switching models or feature subsets
+Edit the config block at the bottom of `src/models/train.py`:
+
+```python
+MODEL_TYPE   = "linearsvc"   # "linearsvc" | "logreg" | "lgbm"
+N_COMPONENTS = 300           # PCA: try 200 / 300 / 500
+RUN_CV       = True
+
+USE_HOG = True   # disable any to experiment with subsets
+USE_LBP = True
+USE_HSV = True
+```
+
+---
+
+## 🌐 Running the Web App
+
+> Requires trained artifacts in `src/models/artifacts/` first.
 
 ```bash
 streamlit run src/app.py
 ```
 
-Upload an image of a snake to see the predicted species, probability scores, and safety alert.
-
-### Inference Script
-You can also run inference programmatically using `src/inference.py` or test it via:
+## 🧪 Quick Inference Test
 
 ```bash
 python test_inference.py
 ```
 
+---
+
 ## 📂 Project Structure
 
 ```
-.
-├── Miniproject-Dataset/    # Dataset images (ignored by git)
-├── data/                   # Processed data
+Snake-Classifier-MP/
+├── data/
+│   ├── dataset/            # ← put your dataset here (or set env var)
+│   └── processed/          # extracted features saved as features.npz
 ├── src/
-│   ├── features/           # Feature extraction logic (extractors.py, pipeline.py)
-│   ├── models/             # Trained models (.pkl) & training scripts
-│   ├── utils/              # Config and safety utilities
-│   ├── app.py              # Streamlit application entry point
-│   └── inference.py        # Core inference class
-├── requirements.txt        # Python dependencies
-└── README.md               # Project documentation
+│   ├── features/
+│   │   ├── extractors.py   # HOG / LBP / HSV extraction (float32)
+│   │   └── pipeline.py     # batch extraction + compressed save
+│   ├── models/
+│   │   ├── train.py        # full training pipeline
+│   │   └── artifacts/      # scaler.pkl, pca.pkl, model.pkl (git-ignored)
+│   ├── utils/
+│   │   ├── config.py       # all paths & hyperparameters
+│   │   └── safety.py       # venomous species detection
+│   ├── app.py              # Streamlit UI
+│   └── inference.py        # SnakeClassifier inference class
+├── test_inference.py
+├── requirements.txt
+└── README.md
 ```
+
+---
 
 ## ⚠️ Disclaimer
 
-This tool is for educational and experimental purposes. **Do not rely solely on this AI for identification in dangerous situations.** detailed herpetological knowledge should always verify the results.
+This tool is for educational and experimental purposes only. **Do not rely solely on this AI in real dangerous situations.** Always verify with expert herpetological knowledge.

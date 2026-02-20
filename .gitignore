@@ -1,6 +1,11 @@
-# Dataset
+# Dataset & processed features (too large for git)
 Miniproject-Dataset/
 data/
+
+# Trained model artifacts (never commit — retrain on target machine)
+src/models/artifacts/
+src/models/*.pkl
+*.pkl
 
 # Python
 __pycache__/
