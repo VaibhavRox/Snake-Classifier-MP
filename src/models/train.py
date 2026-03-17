@@ -127,20 +127,22 @@ def train_model(X_train, y_train, model_type="linearsvc"):
     model_type = model_type.lower()
 
     if model_type == "linearsvc":
-        print("\nTraining LinearSVC...")
+        print("\nTraining LinearSVC (optimized for multiclass, memory-efficient)...")
         model = LinearSVC(
+            C=2.0,
+            max_iter=20000,
+            verbose=1,
+            random_state=RANDOM_SEED,
             class_weight="balanced",
-            max_iter=5000,
-            random_state=RANDOM_SEED
+            dual=True,
+            tol=1e-4
         )
 
     elif model_type == "logreg":
-        print("\nTraining Logistic Regression (multinomial · saga)...")
+        print("\nTraining Logistic Regression (saga)...")
         model = LogisticRegression(
-            max_iter=1000,
-            multi_class="multinomial",
+            max_iter=5000,
             solver="saga",
-            n_jobs=-1,
             class_weight="balanced",
             random_state=RANDOM_SEED
         )
@@ -156,7 +158,8 @@ def train_model(X_train, y_train, model_type="linearsvc"):
         model = lgb.LGBMClassifier(
             n_estimators=500,
             learning_rate=0.05,
-            num_leaves=63,
+            num_leaves=30,
+            max_depth=5,
             n_jobs=-1,
             class_weight="balanced",
             random_state=RANDOM_SEED
@@ -219,12 +222,20 @@ def cross_validate(model_type, X_train, y_train, n_splits=3):
     model_type = model_type.lower()
     if model_type == "linearsvc":
         cv_model = LinearSVC(
-            class_weight="balanced", max_iter=5000, random_state=RANDOM_SEED
+            C=1.0,
+            max_iter=10000,
+            verbose=1,
+            random_state=RANDOM_SEED,
+            class_weight="balanced",
+            dual=False,
+            tol=1e-3
         )
     elif model_type == "logreg":
         cv_model = LogisticRegression(
-            max_iter=1000, multi_class="multinomial", solver="saga",
-            n_jobs=-1, class_weight="balanced", random_state=RANDOM_SEED
+            max_iter=1000,
+            solver="saga",
+            class_weight="balanced",
+            random_state=RANDOM_SEED
         )
     elif model_type == "lgbm":
         try:
@@ -307,8 +318,8 @@ def run_training(
 
 if __name__ == "__main__":
     # ── Configuration ────────────────────────────────────────────────────────
-    MODEL_TYPE    = "linearsvc"   # "linearsvc" | "logreg" | "lgbm"
-    N_COMPONENTS  = 300           # PCA: try 200 / 300 / 500
+    MODEL_TYPES   = ["linearsvc", "logreg", "lgbm"]
+    N_COMPONENTS  = 500           # PCA: try 200 / 300 / 500
     RUN_CV        = True          # StratifiedKFold cross-validation (3-fold)
 
     # Feature subset flags — disable any to experiment with subsets
@@ -317,13 +328,17 @@ if __name__ == "__main__":
     USE_HSV = True
     # ─────────────────────────────────────────────────────────────────────────
 
-    run_training(
-        model_type    = MODEL_TYPE,
-        n_components  = N_COMPONENTS,
-        run_cv        = RUN_CV,
-        use_hog       = USE_HOG,
-        use_lbp       = USE_LBP,
-        use_hsv       = USE_HSV,
-        artifacts_dir = ARTIFACTS_PATH,
-    )
+    for model_type in MODEL_TYPES:
+        print(f"\n{'='*60}\nTraining model: {model_type}\n{'='*60}")
+        # Save artifacts in a subfolder for each model
+        model_artifacts_dir = os.path.join(ARTIFACTS_PATH, model_type)
+        run_training(
+            model_type    = model_type,
+            n_components  = N_COMPONENTS,
+            run_cv        = RUN_CV,
+            use_hog       = USE_HOG,
+            use_lbp       = USE_LBP,
+            use_hsv       = USE_HSV,
+            artifacts_dir = model_artifacts_dir,
+        )
 

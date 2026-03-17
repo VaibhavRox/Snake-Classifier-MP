@@ -6,13 +6,12 @@ import os
 _THIS_DIR    = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))  # Snake-Classifier-MP/
 
-# Allow overriding via environment variables for flexibility
-DATASET_PATH       = os.environ.get("SNAKE_DATASET_PATH",   os.path.join(PROJECT_ROOT, "data", "dataset"))
+DATASET_PATH       = os.environ.get("SNAKE_DATASET_PATH",   os.path.join(PROJECT_ROOT, "dataset"))
 PROCESSED_DATA_PATH = os.environ.get("SNAKE_PROCESSED_PATH", os.path.join(PROJECT_ROOT, "data", "processed"))
 ARTIFACTS_PATH     = os.environ.get("SNAKE_ARTIFACTS_PATH", os.path.join(PROJECT_ROOT, "src", "models", "artifacts"))
 
 # Image Processing
-IMG_SIZE = (128, 128)       # Resize target
+IMG_SIZE = (256, 256)       # Resize target
 GAUSSIAN_BLUR_KERNEL = (5, 5)
 
 # Feature Config
@@ -30,4 +29,4 @@ RANDOM_SEED = 42
 TEST_SPLIT  = 0.2
 
 # PCA
-PCA_COMPONENTS = 300  # Recommended default; try 200 / 300 / 500
+PCA_COMPONENTS = 1000  # Increased for better variance preservation

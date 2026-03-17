@@ -1,11 +1,6 @@
 # Dataset & processed features (too large for git)
-Miniproject-Dataset/
-data/
-
-# Trained model artifacts (never commit — retrain on target machine)
-src/models/artifacts/
-src/models/*.pkl
-*.pkl
+dataset/
+data*/
 
 # Python
 __pycache__/
@@ -29,3 +24,4 @@ pip-delete-this-directory.txt
 *.log
 prompt.md
 *.pdf
+*.pkl

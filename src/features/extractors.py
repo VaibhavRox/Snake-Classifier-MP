@@ -1,3 +1,4 @@
+from src.features.augmentation import augment_image
 
 import cv2
 import numpy as np
@@ -11,7 +12,7 @@ from src.utils.config import (
 
 def preprocess_image(image_path):
     """
-    Reads an image, resizes it, and applies Gaussian blur.
+    Reads an image, resizes it, and applies random augmentation.
     Returns the processed image in BGR (OpenCV default).
     """
     img = cv2.imread(image_path)
@@ -19,7 +20,7 @@ def preprocess_image(image_path):
         raise ValueError(f"Could not read image: {image_path}")
 
     img = cv2.resize(img, IMG_SIZE)
-    img = cv2.GaussianBlur(img, (5, 5), 0)
+    img = augment_image(img)
     return img
 
 
