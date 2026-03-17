@@ -1,132 +1,168 @@
-# 🐍 AI Snake Species Classifier
+# AI Snake Species Classifier
 
-AI-powered snake species classifier (1,686 classes) using **Classical Machine Learning** — HOG + LBP + HSV features with LinearSVC or Logistic Regression. Includes venomous/non-venomous safety assessment and a Streamlit web UI.
+AI-powered snake species classifier (1,686 classes) using classical machine learning.
+The pipeline combines HOG + LBP + HSV features, applies StandardScaler + PCA,
+and supports LinearSVC, Logistic Regression, and LightGBM.
 
-## 🚀 Features
+## Features
 
-- **Multi-feature extraction** — HOG, LBP, HSV colour histograms (individually selectable)
-- **No data leakage** — stratified split performed *before* scaling and PCA
-- **LinearSVC / Logistic Regression / LightGBM** — no RandomForest memory crashes
-- **Top-1 and Top-5 accuracy** reported after training
-- **3-fold StratifiedKFold** cross-validation
-- **Safety gate** — flags venomous species and low-confidence predictions as UNKNOWN
-- **Streamlit UI** for real-time inference
+- Configurable feature extraction (HOG, LBP, HSV in any combination)
+- Online image augmentation during feature extraction
+	(random flip, 90-degree rotation, brightness jitter)
+- No data leakage (stratified split before scaler/PCA fit)
+- Optional 3-fold StratifiedKFold cross-validation
+- Top-1 and Top-5 evaluation metrics
+- Venom safety-aware postprocessing for inference output
+- Streamlit UI for interactive predictions
 
----
-
-## 🛠️ Setup (on any machine)
+## Setup
 
 ### 1. Clone
+
 ```bash
-git clone https://github.com/VaibhavRox/Miniproject-AI-based-Snake-Classification.git
-cd Miniproject-AI-based-Snake-Classification/Snake-Classifier-MP
+git clone https://github.com/VaibhavRox/Snake-Classifier-MP.git
+cd Snake-Classifier-MP
 ```
 
 ### 2. Install dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Point to your dataset
-The dataset is **not** included in the repo (it's in `.gitignore`).
-Tell the code where your dataset lives via an environment variable:
+### 3. Configure paths (optional but recommended)
+
+All paths are configurable via environment variables in `src/utils/config.py`.
 
 ```bash
-# macOS / Linux
-export SNAKE_DATASET_PATH=/path/to/your/dataset
+# Dataset root (contains species folders)
+# Default: <project_root>/dataset
+export SNAKE_DATASET_PATH=/path/to/dataset
 
-# Windows PowerShell
-$env:SNAKE_DATASET_PATH = "C:\path\to\your\dataset"
+# Processed features output folder
+# Default: <project_root>/data/processed
+export SNAKE_PROCESSED_PATH=/path/to/processed
+
+# Artifacts folder used by inference
+# Default: <project_root>/src/models/artifacts
+export SNAKE_ARTIFACTS_PATH=/path/to/artifacts
 ```
 
-Expected dataset structure:
+Windows PowerShell example:
+
+```powershell
+$env:SNAKE_DATASET_PATH = "C:\path\to\dataset"
+$env:SNAKE_PROCESSED_PATH = "C:\path\to\processed"
+$env:SNAKE_ARTIFACTS_PATH = "C:\path\to\artifacts"
 ```
+
+Expected dataset layout:
+
+```text
 <SNAKE_DATASET_PATH>/
-├── species_name_1/
-│   ├── img001.jpg
-│   └── ...
-├── species_name_2/
-│   └── ...
-└── ...
+	Species_A/
+		img001.jpg
+		...
+	Species_B/
+		...
 ```
 
----
+## Training
 
-## 🏃 Training
+Run:
 
 ```bash
 python -m src.models.train
 ```
 
-This runs the full pipeline:
+Current training flow in `src/models/train.py`:
+
+1. Load compressed feature matrix (`features.npz`) or build it with `src/features/pipeline.py`
+2. Stratified train/test split (80/20)
+3. StandardScaler fit on train only
+4. PCA projection (configured in code)
+5. Optional CV (3-fold)
+6. Train models listed in `MODEL_TYPES`
+7. Save artifacts for each model
+
+By default, training iterates through all model types:
+
+- `linearsvc`
+- `logreg`
+- `lgbm`
+
+Artifacts are saved per model subfolder:
+
+```text
+src/models/artifacts/
+	linearsvc/
+		scaler.pkl
+		pca.pkl
+		model.pkl
+		label_names.pkl
+	logreg/
+		...
+	lgbm/
+		...
 ```
-Load data → Stratified split (80/20) → StandardScaler → PCA (300 components)
-→ 3-fold CV → Train LinearSVC → Top-1 / Top-5 accuracy → Save artifacts
+
+### Important for inference
+
+`SnakeClassifier` expects one set of artifacts in the directory pointed to by
+`SNAKE_ARTIFACTS_PATH`. Since training now saves subfolders per model,
+set the variable to a specific model folder before running inference:
+
+```powershell
+$env:SNAKE_ARTIFACTS_PATH = "C:\...\Snake-Classifier-MP\src\models\artifacts\linearsvc"
 ```
 
-Artifacts are saved to `src/models/artifacts/`:
-- `scaler.pkl`
-- `pca.pkl`
-- `model.pkl`
-- `label_names.pkl`
+## Run Inference
 
-### Switching models or feature subsets
-Edit the config block at the bottom of `src/models/train.py`:
-
-```python
-MODEL_TYPE   = "linearsvc"   # "linearsvc" | "logreg" | "lgbm"
-N_COMPONENTS = 300           # PCA: try 200 / 300 / 500
-RUN_CV       = True
-
-USE_HOG = True   # disable any to experiment with subsets
-USE_LBP = True
-USE_HSV = True
-```
-
----
-
-## 🌐 Running the Web App
-
-> Requires trained artifacts in `src/models/artifacts/` first.
+### Streamlit app
 
 ```bash
 streamlit run src/app.py
 ```
 
-## 🧪 Quick Inference Test
+### CLI smoke test
 
 ```bash
 python test_inference.py
 ```
 
----
+## Project Structure
 
-## 📂 Project Structure
-
-```
+```text
 Snake-Classifier-MP/
-├── data/
-│   ├── dataset/            # ← put your dataset here (or set env var)
-│   └── processed/          # extracted features saved as features.npz
-├── src/
-│   ├── features/
-│   │   ├── extractors.py   # HOG / LBP / HSV extraction (float32)
-│   │   └── pipeline.py     # batch extraction + compressed save
-│   ├── models/
-│   │   ├── train.py        # full training pipeline
-│   │   └── artifacts/      # scaler.pkl, pca.pkl, model.pkl (git-ignored)
-│   ├── utils/
-│   │   ├── config.py       # all paths & hyperparameters
-│   │   └── safety.py       # venomous species detection
-│   ├── app.py              # Streamlit UI
-│   └── inference.py        # SnakeClassifier inference class
-├── test_inference.py
-├── requirements.txt
-└── README.md
+	data/
+		processed/
+	dataset/
+	src/
+		features/
+			augmentation.py   # random flip/rotate/brightness augmentation
+			extractors.py     # HOG/LBP/HSV feature extraction
+			pipeline.py       # dataset -> compressed features.npz
+		models/
+			train.py          # full train/eval/save pipeline
+			artifacts/        # model-wise artifacts (gitignored)
+		utils/
+			config.py         # paths + hyperparameters
+			safety.py         # venom safety checks
+		inference.py        # SnakeClassifier class
+		app.py              # Streamlit UI
+	test_inference.py
+	requirements.txt
+	README.md
 ```
 
----
+## Notes on Large Files
 
-## ⚠️ Disclaimer
+- `*.pkl` files are ignored by `.gitignore`.
+- Do not commit model artifacts to GitHub.
+- If large artifact blobs were committed before being ignored, remove them from
+	commit history before pushing.
 
-This tool is for educational and experimental purposes only. **Do not rely solely on this AI in real dangerous situations.** Always verify with expert herpetological knowledge.
+## Disclaimer
+
+This project is for educational and experimental use.
+Do not rely on model output alone in dangerous real-world snake encounters.
