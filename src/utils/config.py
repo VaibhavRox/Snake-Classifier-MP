@@ -19,8 +19,8 @@ HOG_ORIENTATIONS     = 9
 HOG_PIXELS_PER_CELL  = (8, 8)
 HOG_CELLS_PER_BLOCK  = (2, 2)
 
-LBP_POINTS = 24   # Number of circular neighbourhood points
-LBP_RADIUS = 3    # Radius of LBP circle
+LBP_POINTS = 16   # Number of circular neighbourhood points (reduced for better generalization)
+LBP_RADIUS = 2    # Radius of LBP circle (reduced from 3 to capture finer texture)
 
 HSV_BINS = (8, 8, 8)  # Hue, Saturation, Value histogram bins
 

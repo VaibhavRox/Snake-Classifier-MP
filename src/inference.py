@@ -54,7 +54,10 @@ class SnakeClassifier:
 
             # Apply the same preprocessing used during training
             features = self.scaler.transform(features)
-            features = self.pca.transform(features)
+
+            # Apply PCA only if it was used during training
+            if self.pca is not None:
+                features = self.pca.transform(features)
 
             # Obtain per-class scores → convert to probabilities
             if hasattr(self.model, "decision_function"):
