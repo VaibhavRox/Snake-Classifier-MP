@@ -1,6 +1,8 @@
 # Dataset & processed features (too large for git)
 dataset/
 data*/
+*data*
+
 
 # Python
 __pycache__/
@@ -25,3 +27,4 @@ pip-delete-this-directory.txt
 prompt.md
 *.pdf
 *.pkl
+*out*
