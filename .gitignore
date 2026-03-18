@@ -29,3 +29,4 @@ prompt.md
 *.pkl
 *out*
 *txt*
+.ipynb_checkpoints/
