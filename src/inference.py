@@ -1,8 +1,14 @@
 
+"""
+Snake Classifier Inference Module.
+
+Uses VGG16 features + trained classifier for snake species identification.
+"""
+
 import os
 import joblib
 import numpy as np
-from src.features.extractors import extract_all_features
+from src.features.extractors import extract_resnet_features
 from src.utils.safety import check_safety
 from src.utils.config import ARTIFACTS_PATH
 
@@ -15,51 +21,73 @@ def _softmax(x):
 
 class SnakeClassifier:
     """
-    Loads the three separate artifacts (scaler, pca, model) saved by the
-    training pipeline and runs end-to-end inference on a single image.
+    Loads trained artifacts (scaler, model) and runs end-to-end inference
+    using VGG16 features.
     """
 
     def __init__(self, artifacts_dir=None):
         self.artifacts_dir = artifacts_dir if artifacts_dir else ARTIFACTS_PATH
         print(f"Loading artifacts from: {self.artifacts_dir}")
+
         try:
             self.scaler      = joblib.load(os.path.join(self.artifacts_dir, "scaler.pkl"))
-            self.pca         = joblib.load(os.path.join(self.artifacts_dir, "pca.pkl"))
             self.model       = joblib.load(os.path.join(self.artifacts_dir, "model.pkl"))
             self.label_names = joblib.load(os.path.join(self.artifacts_dir, "label_names.pkl"))
-            print("All artifacts loaded successfully.")
+
+            # PCA is optional (we don't use it with VGG)
+            pca_path = os.path.join(self.artifacts_dir, "pca.pkl")
+            if os.path.exists(pca_path):
+                self.pca = joblib.load(pca_path)
+                print("Artifacts loaded (with PCA).")
+            else:
+                self.pca = None
+                print("Artifacts loaded (no PCA - using VGG features directly).")
+
         except FileNotFoundError as e:
             print(f"Artifact not found: {e}\nPlease run training first.")
             self.model = None
 
     def predict(self, image_path):
         """
-        Runs the full inference pipeline on a single image file.
+        Run inference on a single image file.
 
-        Returns a dict with keys:
-            top_3          — list of {species, probability, is_venomous, venomous_type}
-            safety_message — safety assessment string
-        or {'error': ...} on failure.
+        Parameters
+        ----------
+        image_path : str
+            Path to the image file.
+
+        Returns
+        -------
+        dict
+            {
+                "top_3": [
+                    {"species": str, "probability": float, "is_venomous": bool, "venomous_type": str},
+                    ...
+                ],
+                "safety_message": str
+            }
+            or {"error": str} on failure.
         """
         if self.model is None:
             return {"error": "Model not loaded. Please run training first."}
 
         try:
-            features = extract_all_features(image_path)
+            # Extract VGG16 features
+            features = extract_resnet_features(image_path)
             if features is None:
                 return {"error": "Feature extraction failed."}
 
-            # Reshape and ensure float32
-            features = features.reshape(1, -1).astype(np.float32)
+            # Reshape for sklearn
+            features = features.reshape(1, -1)
 
-            # Apply the same preprocessing used during training
+            # Apply scaler
             features = self.scaler.transform(features)
 
-            # Apply PCA only if it was used during training
+            # Apply PCA if it exists (backward compatibility)
             if self.pca is not None:
                 features = self.pca.transform(features)
 
-            # Obtain per-class scores → convert to probabilities
+            # Get predictions
             if hasattr(self.model, "decision_function"):
                 scores = self.model.decision_function(features)[0]
                 probs  = _softmax(scores)
@@ -68,6 +96,7 @@ class SnakeClassifier:
             else:
                 return {"error": "Model supports neither decision_function nor predict_proba."}
 
+            # Get safety assessment
             top_3, safety_msg = check_safety(probs, self.label_names)
 
             return {
@@ -81,5 +110,4 @@ class SnakeClassifier:
 
 if __name__ == "__main__":
     classifier = SnakeClassifier()
-    print("Inference system initialised.")
-
+    print("Inference system initialized.")

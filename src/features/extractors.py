@@ -1,139 +1,239 @@
+"""
+VGG16-based Feature Extraction for Snake Classification.
+
+Uses pretrained VGG16 (ImageNet weights) to extract 4096-dimensional
+feature vectors from images. This replaces the previous ResNet50 approach.
+"""
+
 import cv2
 import numpy as np
-from skimage.feature import hog, local_binary_pattern
-from src.utils.config import (
-    IMG_SIZE,
-    HOG_ORIENTATIONS, HOG_PIXELS_PER_CELL, HOG_CELLS_PER_BLOCK,
-    LBP_POINTS, LBP_RADIUS,
-    HSV_BINS
-)
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from PIL import Image
 
-def preprocess_image(image_path):
-    """
-    Reads an image and resizes it.
-    NOTE: Augmentation removed - should be applied separately at pipeline level.
-    Returns the processed image in BGR (OpenCV default).
-    """
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError(f"Could not read image: {image_path}")
-
-    img = cv2.resize(img, IMG_SIZE)
-    return img
+# Global model instance (loaded once for efficiency)
+_vgg_model = None
+_device = None
 
 
-def preprocess_image_array(img_bgr):
+def _get_vgg_model():
     """
-    Preprocesses an image array (already loaded).
-    Used for augmented images passed as numpy arrays.
+    Lazy-load VGG16 model (singleton pattern for efficiency).
+    Returns the model and device.
     """
-    if img_bgr is None:
-        raise ValueError("Image array is None")
-    img = cv2.resize(img_bgr, IMG_SIZE)
-    return img
+    global _vgg_model, _device
+
+    if _vgg_model is None:
+        print("Loading VGG16 (ImageNet pretrained)...")
+
+        # Use GPU if available
+        _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {_device}")
+
+        # Load pretrained VGG16
+        vgg = models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1)
+
+        # Use features (conv layers) + avgpool + first part of classifier
+        # VGG classifier: Linear(25088, 4096) -> ReLU -> Dropout -> Linear(4096, 4096) -> ReLU -> Dropout -> Linear(4096, 1000)
+        # We want the 4096-dim output after the first FC + ReLU
+        _vgg_model = nn.Sequential(
+            vgg.features,
+            vgg.avgpool,
+            nn.Flatten(),
+            vgg.classifier[0],  # Linear(25088, 4096)
+            vgg.classifier[1],  # ReLU
+        )
+
+        # Set to eval mode and move to device
+        _vgg_model.eval()
+        _vgg_model.to(_device)
+
+        print("VGG16 loaded successfully.")
+
+    return _vgg_model, _device
 
 
-def extract_hog(img_gray):
-    """
-    Extracts Histogram of Oriented Gradients (HOG) features.
-    Input : Grayscale image (uint8 or float)
-    Output: 1-D float32 array
-    """
-    features = hog(
-        img_gray,
-        orientations=HOG_ORIENTATIONS,
-        pixels_per_cell=HOG_PIXELS_PER_CELL,
-        cells_per_block=HOG_CELLS_PER_BLOCK,
-        block_norm='L2-Hys',
-        visualize=False
+# ImageNet normalization transform
+_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],  # ImageNet mean
+        std=[0.229, 0.224, 0.225]    # ImageNet std
     )
-    return features.astype(np.float32)
+])
 
 
-def extract_lbp(img_gray):
+def extract_resnet_features(image_path):
     """
-    Extracts Local Binary Patterns (LBP) histogram.
-    Input : Grayscale image
-    Output: 1-D float32 array
-    """
-    lbp = local_binary_pattern(img_gray, LBP_POINTS, LBP_RADIUS, method='uniform')
-    n_bins = int(lbp.max() + 1)
-    hist, _ = np.histogram(lbp.ravel(), bins=n_bins, range=(0, n_bins), density=True)
-    return hist.astype(np.float32)
+    Extract VGG16 features from an image file.
 
+    Parameters
+    ----------
+    image_path : str
+        Path to the image file.
 
-def extract_color_histogram(img_bgr):
+    Returns
+    -------
+    np.ndarray
+        Feature vector of shape (4096,), or None on error.
     """
-    Extracts a colour histogram in HSV space (concatenated per-channel).
-    Input : BGR image (OpenCV default)
-    Output: 1-D float32 array
-    """
-    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
-    hist = cv2.calcHist([hsv], [0, 1, 2], None, HSV_BINS, [0, 180, 0, 256, 0, 256])
-    cv2.normalize(hist, hist)
-    return hist.flatten().astype(np.float32)
-
-
-def extract_all_features(image_path):
-    """
-    Convenience wrapper: concatenates HOG + LBP + HSV features.
-    Returns a 1-D float32 array, or None on error.
-    """
-    return extract_selected_features(image_path, use_hog=True, use_lbp=True, use_hsv=True)
-
-
-def extract_selected_features(image_path, use_hog=True, use_lbp=True, use_hsv=True):
-    """
-    Extracts a configurable subset of features (HOG / LBP / HSV).
-    At least one feature type must be enabled.
-    Returns a 1-D float32 array, or None on error.
-    """
-    if not any([use_hog, use_lbp, use_hsv]):
-        raise ValueError("At least one feature type (HOG / LBP / HSV) must be enabled.")
-
     try:
-        img_bgr  = preprocess_image(image_path)
-        img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        # Load image using PIL (RGB format)
+        img = Image.open(image_path).convert('RGB')
 
-        parts = []
-        if use_hog:
-            parts.append(extract_hog(img_gray))
-        if use_lbp:
-            parts.append(extract_lbp(img_gray))
-        if use_hsv:
-            parts.append(extract_color_histogram(img_bgr))
+        # Apply transforms
+        img_tensor = _transform(img).unsqueeze(0)  # Add batch dimension
 
-        return np.hstack(parts).astype(np.float32)
+        # Get model and device
+        model, device = _get_vgg_model()
+        img_tensor = img_tensor.to(device)
+
+        # Extract features (no gradients needed)
+        with torch.no_grad():
+            features = model(img_tensor)
+
+        # Flatten and convert to numpy
+        features = features.squeeze().cpu().numpy()
+
+        return features.astype(np.float32)
 
     except Exception as e:
         print(f"Error extracting features from {image_path}: {e}")
         return None
 
 
-def extract_features_from_array(img_bgr, use_hog=True, use_lbp=True, use_hsv=True):
+def extract_resnet_features_from_array(img_bgr):
     """
-    Extracts features from an image array (already loaded as BGR numpy array).
-    Used for augmented images that are generated in-memory.
-    Returns a 1-D float32 array, or None on error.
-    """
-    if not any([use_hog, use_lbp, use_hsv]):
-        raise ValueError("At least one feature type (HOG / LBP / HSV) must be enabled.")
+    Extract VGG16 features from a BGR numpy array (OpenCV format).
 
+    Parameters
+    ----------
+    img_bgr : np.ndarray
+        Image in BGR format (OpenCV default).
+
+    Returns
+    -------
+    np.ndarray
+        Feature vector of shape (4096,), or None on error.
+    """
     try:
-        img_bgr  = preprocess_image_array(img_bgr)
-        img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        # Convert BGR to RGB
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-        parts = []
-        if use_hog:
-            parts.append(extract_hog(img_gray))
-        if use_lbp:
-            parts.append(extract_lbp(img_gray))
-        if use_hsv:
-            parts.append(extract_color_histogram(img_bgr))
+        # Convert to PIL Image
+        img_pil = Image.fromarray(img_rgb)
 
-        return np.hstack(parts).astype(np.float32)
+        # Apply transforms
+        img_tensor = _transform(img_pil).unsqueeze(0)
+
+        # Get model and device
+        model, device = _get_vgg_model()
+        img_tensor = img_tensor.to(device)
+
+        # Extract features
+        with torch.no_grad():
+            features = model(img_tensor)
+
+        # Flatten and convert to numpy
+        features = features.squeeze().cpu().numpy()
+
+        return features.astype(np.float32)
 
     except Exception as e:
-        print(f"Error extracting features from image array: {e}")
+        print(f"Error extracting features from array: {e}")
         return None
 
+
+def extract_resnet_features_batch(image_paths, batch_size=32):
+    """
+    Extract VGG16 features from multiple images in batches.
+
+    Parameters
+    ----------
+    image_paths : list
+        List of image file paths.
+    batch_size : int
+        Number of images to process at once.
+
+    Returns
+    -------
+    np.ndarray
+        Feature matrix of shape (n_images, 4096).
+    list
+        List of indices that failed (for error handling).
+    """
+    model, device = _get_vgg_model()
+
+    all_features = []
+    failed_indices = []
+
+    for i in range(0, len(image_paths), batch_size):
+        batch_paths = image_paths[i:i + batch_size]
+        batch_tensors = []
+        batch_indices = []
+
+        for j, path in enumerate(batch_paths):
+            try:
+                img = Image.open(path).convert('RGB')
+                img_tensor = _transform(img)
+                batch_tensors.append(img_tensor)
+                batch_indices.append(i + j)
+            except Exception as e:
+                print(f"Failed to load {path}: {e}")
+                failed_indices.append(i + j)
+
+        if batch_tensors:
+            # Stack into batch
+            batch = torch.stack(batch_tensors).to(device)
+
+            # Extract features
+            with torch.no_grad():
+                features = model(batch)
+
+            # Convert to numpy (already flattened by VGG model)
+            features = features.cpu().numpy()
+
+            all_features.append(features)
+
+    if all_features:
+        return np.vstack(all_features).astype(np.float32), failed_indices
+    else:
+        return np.array([]).reshape(0, 4096), failed_indices
+
+
+# Backward compatibility aliases
+def extract_all_features(image_path):
+    """Alias for extract_resnet_features (backward compatibility)."""
+    return extract_resnet_features(image_path)
+
+
+def extract_features_from_array(img_bgr, use_hog=True, use_lbp=True, use_hsv=True):
+    """
+    Alias for extract_resnet_features_from_array (backward compatibility).
+    The use_hog, use_lbp, use_hsv parameters are ignored.
+    """
+    return extract_resnet_features_from_array(img_bgr)
+
+
+def extract_selected_features(image_path, use_hog=True, use_lbp=True, use_hsv=True):
+    """
+    Alias for extract_resnet_features (backward compatibility).
+    The use_hog, use_lbp, use_hsv parameters are ignored.
+    """
+    return extract_resnet_features(image_path)
+
+
+# Legacy functions (kept for reference, but not used)
+def preprocess_image(image_path):
+    """Legacy: Load and resize image."""
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError(f"Could not read image: {image_path}")
+    return cv2.resize(img, (224, 224))
+
+
+def preprocess_image_array(img_bgr):
+    """Legacy: Resize image array."""
+    return cv2.resize(img_bgr, (224, 224))
