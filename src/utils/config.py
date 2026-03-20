@@ -29,4 +29,8 @@ RANDOM_SEED = 42
 TEST_SPLIT  = 0.2
 
 # PCA
-PCA_COMPONENTS = 200   # Reduced to fit small dataset (n_samples ~ 560)
+PCA_COMPONENTS = 5000  # Must be <= min(n_samples, n_features)
+
+# Augmentation
+AUGMENT_FACTOR = 5  # Number of augmented copies per image (0 = disabled)
+                    # With 1000 images and factor=2: 1000 * 3 = 3000 samples

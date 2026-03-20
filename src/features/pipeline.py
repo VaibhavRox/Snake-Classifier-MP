@@ -1,9 +1,11 @@
 
 import os
+import cv2
 import numpy as np
 from tqdm import tqdm
 from src.utils.config import DATASET_PATH, PROCESSED_DATA_PATH
-from src.features.extractors import extract_selected_features
+from src.features.extractors import extract_selected_features, extract_features_from_array
+from src.features.augmentation import generate_augmented_images
 
 
 def process_dataset(
@@ -12,6 +14,7 @@ def process_dataset(
     use_hog=True,
     use_lbp=True,
     use_hsv=True,
+    augment_factor=0,
 ):
     """
     Iterates through the dataset, extracts features, and saves them.
@@ -24,6 +27,9 @@ def process_dataset(
         Limit number of species folders to process (None = all).
     use_hog / use_lbp / use_hsv : bool
         Feature subset flags — any combination is valid.
+    augment_factor : int
+        Number of augmented copies per image (0 = no augmentation).
+        E.g., augment_factor=2 → each image produces 3 samples (1 original + 2 augmented).
     """
     os.makedirs(PROCESSED_DATA_PATH, exist_ok=True)
 
@@ -41,7 +47,8 @@ def process_dataset(
         species_folders = species_folders[:max_classes]
 
     active = [n for n, f in [("HOG", use_hog), ("LBP", use_lbp), ("HSV", use_hsv)] if f]
-    print(f"Found {len(species_folders)} species. Active features: {', '.join(active)}")
+    aug_msg = f", Augment x{augment_factor}" if augment_factor > 0 else ""
+    print(f"Found {len(species_folders)} species. Active features: {', '.join(active)}{aug_msg}")
 
     for label_idx, species in enumerate(tqdm(species_folders, desc="Processing Species")):
         species_dir = os.path.join(DATASET_PATH, species)
@@ -57,12 +64,27 @@ def process_dataset(
 
         for img_file in image_files:
             img_path = os.path.join(species_dir, img_file)
+
+            # Extract features from original image
             feat_vector = extract_selected_features(
                 img_path, use_hog=use_hog, use_lbp=use_lbp, use_hsv=use_hsv
             )
             if feat_vector is not None:
                 features.append(feat_vector)
                 labels.append(label_idx)
+
+            # Generate augmented versions if requested
+            if augment_factor > 0 and feat_vector is not None:
+                img_bgr = cv2.imread(img_path)
+                if img_bgr is not None:
+                    aug_images = generate_augmented_images(img_bgr, num_augments=augment_factor)
+                    for aug_img in aug_images:
+                        aug_feat = extract_features_from_array(
+                            aug_img, use_hog=use_hog, use_lbp=use_lbp, use_hsv=use_hsv
+                        )
+                        if aug_feat is not None:
+                            features.append(aug_feat)
+                            labels.append(label_idx)
 
     # Convert — store as float32 to halve memory vs float64
     X = np.array(features, dtype=np.float32)
