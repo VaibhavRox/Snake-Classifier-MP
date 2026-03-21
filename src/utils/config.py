@@ -1,36 +1,44 @@
 
 import os
 
-# Base Paths — resolved relative to this file's location so the project is portable
-# src/utils/config.py → go up 3 levels to reach the project root (Snake-Classifier-MP/)
-_THIS_DIR    = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))  # Snake-Classifier-MP/
+# Base Paths
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 
-DATASET_PATH       = os.environ.get("SNAKE_DATASET_PATH",   os.path.join(PROJECT_ROOT, "venomous_data"))
+DATASET_PATH = os.environ.get("SNAKE_DATASET_PATH", os.path.join(PROJECT_ROOT, "venomous_data"))
 PROCESSED_DATA_PATH = os.environ.get("SNAKE_PROCESSED_PATH", os.path.join(PROJECT_ROOT, "data", "processed"))
-ARTIFACTS_PATH     = os.environ.get("SNAKE_ARTIFACTS_PATH", os.path.join(PROJECT_ROOT, "src", "models", "artifacts"))
+ARTIFACTS_PATH = os.environ.get("SNAKE_ARTIFACTS_PATH", os.path.join(PROJECT_ROOT, "src", "models", "artifacts"))
 
 # Image Processing
-IMG_SIZE = (256, 256)       # Resize target
-GAUSSIAN_BLUR_KERNEL = (5, 5)
+IMG_SIZE = (224, 224)
 
-# Feature Config
-HOG_ORIENTATIONS     = 9
-HOG_PIXELS_PER_CELL  = (8, 8)
-HOG_CELLS_PER_BLOCK  = (2, 2)
+# Feature Extraction (EfficientNet-B0)
+FEATURE_DIM = 1280
+BATCH_SIZE = 32
 
-LBP_POINTS = 16   # Number of circular neighbourhood points (reduced for better generalization)
-LBP_RADIUS = 2    # Radius of LBP circle (reduced from 3 to capture finer texture)
-
-HSV_BINS = (8, 8, 8)  # Hue, Saturation, Value histogram bins
-
-# Model Config
+# Model Training
 RANDOM_SEED = 42
-TEST_SPLIT  = 0.2
+TEST_SPLIT = 0.2
+CV_FOLDS = 5
+TUNING_FOLDS = 3
 
-# PCA
-PCA_COMPONENTS = 5000  # Must be <= min(n_samples, n_features)
+# Models to train
+MODEL_TYPES = ["linearsvc", "logreg"]
 
-# Augmentation
-AUGMENT_FACTOR = 5  # Number of augmented copies per image (0 = disabled)
-                    # With 1000 images and factor=2: 1000 * 3 = 3000 samples
+# Hyperparameter Grids
+PARAM_GRIDS = {
+    'linearsvc': {
+        'C': [0.1, 1, 5, 10],
+        'loss': ['hinge', 'squared_hinge'],
+    },
+    'logreg': {
+        'C': [0.1, 1, 5, 10],
+        'solver': ['lbfgs', 'saga'],
+        'penalty': ['l2'],
+        'max_iter': [2000],
+    }
+}
+
+# Augmentation (disabled)
+AUGMENT_FACTOR = 0
+MAX_AUG_RATIO = 0.0

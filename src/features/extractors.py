@@ -1,139 +1,185 @@
+"""
+EfficientNet-B0 Feature Extraction for Snake Classification.
+
+Uses pretrained EfficientNet-B0 (ImageNet weights) to extract 1280-dimensional
+feature vectors from images using Global Average Pooling.
+"""
+
 import cv2
 import numpy as np
-from skimage.feature import hog, local_binary_pattern
-from src.utils.config import (
-    IMG_SIZE,
-    HOG_ORIENTATIONS, HOG_PIXELS_PER_CELL, HOG_CELLS_PER_BLOCK,
-    LBP_POINTS, LBP_RADIUS,
-    HSV_BINS
-)
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from PIL import Image
 
-def preprocess_image(image_path):
-    """
-    Reads an image and resizes it.
-    NOTE: Augmentation removed - should be applied separately at pipeline level.
-    Returns the processed image in BGR (OpenCV default).
-    """
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError(f"Could not read image: {image_path}")
-
-    img = cv2.resize(img, IMG_SIZE)
-    return img
+# Global model instance (loaded once for efficiency)
+_model = None
+_device = None
 
 
-def preprocess_image_array(img_bgr):
+def _get_model():
     """
-    Preprocesses an image array (already loaded).
-    Used for augmented images passed as numpy arrays.
+    Lazy-load EfficientNet-B0 model (singleton pattern for efficiency).
+    Returns the model and device.
     """
-    if img_bgr is None:
-        raise ValueError("Image array is None")
-    img = cv2.resize(img_bgr, IMG_SIZE)
-    return img
+    global _model, _device
+
+    if _model is None:
+        print("Loading EfficientNet-B0 (ImageNet pretrained)...")
+
+        # Use GPU if available
+        _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {_device}")
+
+        # Load pretrained EfficientNet-B0
+        efficientnet = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1)
+
+        # Remove the classification head
+        # EfficientNet-B0: features -> avgpool (1280) -> classifier
+        _model = nn.Sequential(
+            efficientnet.features,
+            efficientnet.avgpool,
+            nn.Flatten()
+        )
+
+        _model.eval()
+        _model.to(_device)
+        print("EfficientNet-B0 loaded successfully. Output: 1280-dim")
+
+    return _model, _device
 
 
-def extract_hog(img_gray):
-    """
-    Extracts Histogram of Oriented Gradients (HOG) features.
-    Input : Grayscale image (uint8 or float)
-    Output: 1-D float32 array
-    """
-    features = hog(
-        img_gray,
-        orientations=HOG_ORIENTATIONS,
-        pixels_per_cell=HOG_PIXELS_PER_CELL,
-        cells_per_block=HOG_CELLS_PER_BLOCK,
-        block_norm='L2-Hys',
-        visualize=False
+# ImageNet normalization transform
+_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],  # ImageNet mean
+        std=[0.229, 0.224, 0.225]    # ImageNet std
     )
-    return features.astype(np.float32)
+])
 
 
-def extract_lbp(img_gray):
+def extract_features(image_path):
     """
-    Extracts Local Binary Patterns (LBP) histogram.
-    Input : Grayscale image
-    Output: 1-D float32 array
-    """
-    lbp = local_binary_pattern(img_gray, LBP_POINTS, LBP_RADIUS, method='uniform')
-    n_bins = int(lbp.max() + 1)
-    hist, _ = np.histogram(lbp.ravel(), bins=n_bins, range=(0, n_bins), density=True)
-    return hist.astype(np.float32)
+    Extract EfficientNet-B0 features from an image file.
 
+    Parameters
+    ----------
+    image_path : str
+        Path to the image file.
 
-def extract_color_histogram(img_bgr):
+    Returns
+    -------
+    np.ndarray
+        Feature vector of shape (1280,), or None on error.
     """
-    Extracts a colour histogram in HSV space (concatenated per-channel).
-    Input : BGR image (OpenCV default)
-    Output: 1-D float32 array
-    """
-    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
-    hist = cv2.calcHist([hsv], [0, 1, 2], None, HSV_BINS, [0, 180, 0, 256, 0, 256])
-    cv2.normalize(hist, hist)
-    return hist.flatten().astype(np.float32)
-
-
-def extract_all_features(image_path):
-    """
-    Convenience wrapper: concatenates HOG + LBP + HSV features.
-    Returns a 1-D float32 array, or None on error.
-    """
-    return extract_selected_features(image_path, use_hog=True, use_lbp=True, use_hsv=True)
-
-
-def extract_selected_features(image_path, use_hog=True, use_lbp=True, use_hsv=True):
-    """
-    Extracts a configurable subset of features (HOG / LBP / HSV).
-    At least one feature type must be enabled.
-    Returns a 1-D float32 array, or None on error.
-    """
-    if not any([use_hog, use_lbp, use_hsv]):
-        raise ValueError("At least one feature type (HOG / LBP / HSV) must be enabled.")
-
     try:
-        img_bgr  = preprocess_image(image_path)
-        img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        img = Image.open(image_path).convert('RGB')
+        img_tensor = _transform(img).unsqueeze(0)
 
-        parts = []
-        if use_hog:
-            parts.append(extract_hog(img_gray))
-        if use_lbp:
-            parts.append(extract_lbp(img_gray))
-        if use_hsv:
-            parts.append(extract_color_histogram(img_bgr))
+        model, device = _get_model()
+        img_tensor = img_tensor.to(device)
 
-        return np.hstack(parts).astype(np.float32)
+        with torch.no_grad():
+            features = model(img_tensor)
+
+        return features.squeeze().cpu().numpy().astype(np.float32)
 
     except Exception as e:
         print(f"Error extracting features from {image_path}: {e}")
         return None
 
 
-def extract_features_from_array(img_bgr, use_hog=True, use_lbp=True, use_hsv=True):
+def extract_features_from_array(img_bgr):
     """
-    Extracts features from an image array (already loaded as BGR numpy array).
-    Used for augmented images that are generated in-memory.
-    Returns a 1-D float32 array, or None on error.
-    """
-    if not any([use_hog, use_lbp, use_hsv]):
-        raise ValueError("At least one feature type (HOG / LBP / HSV) must be enabled.")
+    Extract EfficientNet-B0 features from a BGR numpy array (OpenCV format).
 
+    Parameters
+    ----------
+    img_bgr : np.ndarray
+        Image in BGR format (OpenCV default).
+
+    Returns
+    -------
+    np.ndarray
+        Feature vector of shape (1280,), or None on error.
+    """
     try:
-        img_bgr  = preprocess_image_array(img_bgr)
-        img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_rgb)
+        img_tensor = _transform(img_pil).unsqueeze(0)
 
-        parts = []
-        if use_hog:
-            parts.append(extract_hog(img_gray))
-        if use_lbp:
-            parts.append(extract_lbp(img_gray))
-        if use_hsv:
-            parts.append(extract_color_histogram(img_bgr))
+        model, device = _get_model()
+        img_tensor = img_tensor.to(device)
 
-        return np.hstack(parts).astype(np.float32)
+        with torch.no_grad():
+            features = model(img_tensor)
+
+        return features.squeeze().cpu().numpy().astype(np.float32)
 
     except Exception as e:
-        print(f"Error extracting features from image array: {e}")
+        print(f"Error extracting features from array: {e}")
         return None
 
+
+def extract_features_batch(image_paths, batch_size=32):
+    """
+    Extract EfficientNet-B0 features from multiple images in batches.
+
+    Parameters
+    ----------
+    image_paths : list
+        List of image file paths.
+    batch_size : int
+        Number of images to process at once.
+
+    Returns
+    -------
+    np.ndarray
+        Feature matrix of shape (n_images, 1280).
+    list
+        List of indices that failed (for error handling).
+    """
+    model, device = _get_model()
+    all_features = []
+    failed_indices = []
+
+    for i in range(0, len(image_paths), batch_size):
+        batch_paths = image_paths[i:i + batch_size]
+        batch_tensors = []
+
+        for j, path in enumerate(batch_paths):
+            try:
+                img = Image.open(path).convert('RGB')
+                img_tensor = _transform(img)
+                batch_tensors.append(img_tensor)
+            except Exception as e:
+                print(f"Failed to load {path}: {e}")
+                failed_indices.append(i + j)
+
+        if batch_tensors:
+            batch = torch.stack(batch_tensors).to(device)
+            with torch.no_grad():
+                features = model(batch)
+            all_features.append(features.cpu().numpy())
+
+    if all_features:
+        return np.vstack(all_features).astype(np.float32), failed_indices
+    else:
+        return np.array([]).reshape(0, 1280), failed_indices
+
+
+# Feature dimension constant
+FEATURE_DIM = 1280
+
+
+# Backward compatibility aliases
+def extract_all_features(image_path):
+    """Alias for extract_features."""
+    return extract_features(image_path)
+
+
+def extract_selected_features(image_path, **kwargs):
+    """Alias for extract_features (legacy parameters ignored)."""
+    return extract_features(image_path)
