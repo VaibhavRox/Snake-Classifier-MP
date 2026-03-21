@@ -2,7 +2,7 @@
 
 AI-powered snake species classifier (1,686 classes) using classical machine learning.
 The pipeline combines HOG + LBP + HSV features, applies StandardScaler + PCA,
-and supports LinearSVC, Logistic Regression, and LightGBM.
+and supports LinearSVC and Logistic Regression.
 
 ## Features
 
@@ -89,7 +89,6 @@ By default, training iterates through all model types:
 
 - `linearsvc`
 - `logreg`
-- `lgbm`
 
 Artifacts are saved per model subfolder:
 
@@ -101,8 +100,6 @@ src/models/artifacts/
 		model.pkl
 		label_names.pkl
 	logreg/
-		...
-	lgbm/
 		...
 ```
 

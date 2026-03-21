@@ -1,41 +1,42 @@
+"""
+Feature Extraction Pipeline using EfficientNet-B0.
+
+Extracts 1280-dimensional features from images using pretrained EfficientNet-B0.
+"""
 
 import os
 import cv2
 import numpy as np
 from tqdm import tqdm
-from src.utils.config import DATASET_PATH, PROCESSED_DATA_PATH
-from src.features.extractors import extract_selected_features, extract_features_from_array
+from src.utils.config import DATASET_PATH, PROCESSED_DATA_PATH, FEATURE_DIM
+from src.features.extractors import extract_features, extract_features_from_array, extract_features_batch
 from src.features.augmentation import generate_augmented_images
 
 
-def process_dataset(
-    max_images_per_class=None,
-    max_classes=None,
-    use_hog=True,
-    use_lbp=True,
-    use_hsv=True,
-    augment_factor=0,
-):
+def process_dataset(max_images_per_class=None, max_classes=None, use_batch=True, batch_size=32):
     """
-    Iterates through the dataset, extracts features, and saves them.
+    Extract EfficientNet-B0 features from all images in the dataset.
 
     Parameters
     ----------
     max_images_per_class : int or None
         Limit images per class (None = all).
     max_classes : int or None
-        Limit number of species folders to process (None = all).
-    use_hog / use_lbp / use_hsv : bool
-        Feature subset flags — any combination is valid.
-    augment_factor : int
-        Number of augmented copies per image (0 = no augmentation).
-        E.g., augment_factor=2 → each image produces 3 samples (1 original + 2 augmented).
+        Limit number of species folders (None = all).
+    use_batch : bool
+        Use batch processing for speed.
+    batch_size : int
+        Batch size for extraction.
+
+    Returns
+    -------
+    X, y, label_names, image_paths
     """
     os.makedirs(PROCESSED_DATA_PATH, exist_ok=True)
 
-    features    = []
-    labels      = []
-    label_names = []
+    print(f"\n{'='*60}")
+    print(f"Feature Extraction: EfficientNet-B0 ({FEATURE_DIM}-dim)")
+    print(f"{'='*60}")
 
     # Collect species folders
     species_folders = sorted([
@@ -46,11 +47,15 @@ def process_dataset(
     if max_classes:
         species_folders = species_folders[:max_classes]
 
-    active = [n for n, f in [("HOG", use_hog), ("LBP", use_lbp), ("HSV", use_hsv)] if f]
-    aug_msg = f", Augment x{augment_factor}" if augment_factor > 0 else ""
-    print(f"Found {len(species_folders)} species. Active features: {', '.join(active)}{aug_msg}")
+    print(f"Found {len(species_folders)} species")
 
-    for label_idx, species in enumerate(tqdm(species_folders, desc="Processing Species")):
+    # Collect all image paths and labels
+    all_paths = []
+    all_labels = []
+    label_names = []
+    class_counts = {}
+
+    for label_idx, species in enumerate(species_folders):
         species_dir = os.path.join(DATASET_PATH, species)
         label_names.append(species)
 
@@ -62,48 +67,81 @@ def process_dataset(
         if max_images_per_class:
             image_files = image_files[:max_images_per_class]
 
+        class_counts[species] = len(image_files)
+
         for img_file in image_files:
             img_path = os.path.join(species_dir, img_file)
+            all_paths.append(img_path)
+            all_labels.append(label_idx)
 
-            # Extract features from original image
-            feat_vector = extract_selected_features(
-                img_path, use_hog=use_hog, use_lbp=use_lbp, use_hsv=use_hsv
-            )
-            if feat_vector is not None:
-                features.append(feat_vector)
-                labels.append(label_idx)
+    print(f"Total images: {len(all_paths)}")
 
-            # Generate augmented versions if requested
-            if augment_factor > 0 and feat_vector is not None:
-                img_bgr = cv2.imread(img_path)
-                if img_bgr is not None:
-                    aug_images = generate_augmented_images(img_bgr, num_augments=augment_factor)
-                    for aug_img in aug_images:
-                        aug_feat = extract_features_from_array(
-                            aug_img, use_hog=use_hog, use_lbp=use_lbp, use_hsv=use_hsv
-                        )
-                        if aug_feat is not None:
-                            features.append(aug_feat)
-                            labels.append(label_idx)
+    # Extract features
+    if use_batch:
+        print(f"Extracting in batches (batch_size={batch_size})...")
+        features, failed = extract_features_batch(all_paths, batch_size=batch_size)
 
-    # Convert — store as float32 to halve memory vs float64
-    X = np.array(features, dtype=np.float32)
-    y = np.array(labels)
+        if failed:
+            print(f"Warning: {len(failed)} images failed")
+            valid_mask = np.ones(len(all_labels), dtype=bool)
+            for idx in failed:
+                valid_mask[idx] = False
+            all_labels = [l for i, l in enumerate(all_labels) if valid_mask[i]]
+            all_paths = [p for i, p in enumerate(all_paths) if valid_mask[i]]
 
-    print(f"Extraction complete. Feature matrix: {X.shape} | dtype: {X.dtype}")
-    print(f"Labels: {y.shape}")
+        X = features
+        y = np.array(all_labels)
+        image_paths = np.array(all_paths)
+    else:
+        features = []
+        valid_paths = []
+        valid_labels = []
 
-    # Save with compression
+        for img_path, label in tqdm(zip(all_paths, all_labels), total=len(all_paths)):
+            feat = extract_features(img_path)
+            if feat is not None:
+                features.append(feat)
+                valid_paths.append(img_path)
+                valid_labels.append(label)
+
+        X = np.array(features, dtype=np.float32)
+        y = np.array(valid_labels)
+        image_paths = np.array(valid_paths)
+
+    print(f"\nExtraction complete: {X.shape}")
+
+    # Save
     save_path = os.path.join(PROCESSED_DATA_PATH, "features.npz")
     np.savez_compressed(
         save_path,
         features=X,
         labels=y,
-        label_names=np.array(label_names)
+        label_names=np.array(label_names),
+        image_paths=image_paths
     )
-    print(f"Saved compressed data → {save_path}")
+    print(f"Saved -> {save_path}")
+
+    return X, y, label_names, image_paths
+
+
+def load_features():
+    """Load preprocessed features."""
+    data_file = os.path.join(PROCESSED_DATA_PATH, "features.npz")
+
+    if not os.path.exists(data_file):
+        return None, None, None, None
+
+    try:
+        data = np.load(data_file, allow_pickle=True)
+        X = data["features"].astype(np.float32)
+        y = data["labels"]
+        label_names = data["label_names"]
+        image_paths = data.get("image_paths", None)
+        return X, y, label_names, image_paths
+    except Exception as e:
+        print(f"Error loading features: {e}")
+        return None, None, None, None
 
 
 if __name__ == "__main__":
-    process_dataset(max_images_per_class=None, max_classes=None)
-
+    process_dataset()
