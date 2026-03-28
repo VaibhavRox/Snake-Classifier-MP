@@ -12,7 +12,7 @@ ARTIFACTS_PATH = os.environ.get("SNAKE_ARTIFACTS_PATH", os.path.join(PROJECT_ROO
 # Image Processing
 IMG_SIZE = (224, 224)
 
-# Feature Extraction (EfficientNet-B0)
+# Feature Extraction (HOG+LBP+HSV descriptors)
 FEATURE_DIM = 1280
 BATCH_SIZE = 32
 

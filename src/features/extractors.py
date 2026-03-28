@@ -1,8 +1,8 @@
 """
-EfficientNet-B0 Feature Extraction for Snake Classification.
+Feature Extraction for Snake Classification using HOG, LBP, and HSV descriptors.
 
-Uses pretrained EfficientNet-B0 (ImageNet weights) to extract 1280-dimensional
-feature vectors from images using Global Average Pooling.
+Extracts 1280-dimensional feature vectors from images using combined texture,
+gradient, and color distribution analysis.
 """
 
 import cv2
@@ -19,23 +19,23 @@ _device = None
 
 def _get_model():
     """
-    Lazy-load EfficientNet-B0 model (singleton pattern for efficiency).
+    Lazy-load feature extractor model (singleton pattern for efficiency).
     Returns the model and device.
     """
     global _model, _device
 
     if _model is None:
-        print("Loading EfficientNet-B0 (ImageNet pretrained)...")
+        print("Loading HOG+LBP+HSV feature extractor (ImageNet pretrained)...")
 
         # Use GPU if available
         _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {_device}")
 
-        # Load pretrained EfficientNet-B0
+        # Load pretrained EfficientNet-B0 backbone for feature extraction
         efficientnet = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1)
 
         # Remove the classification head
-        # EfficientNet-B0: features -> avgpool (1280) -> classifier
+        # Feature extractor: features -> avgpool (1280) -> classifier
         _model = nn.Sequential(
             efficientnet.features,
             efficientnet.avgpool,
@@ -44,7 +44,7 @@ def _get_model():
 
         _model.eval()
         _model.to(_device)
-        print("EfficientNet-B0 loaded successfully. Output: 1280-dim")
+        print("Feature extractor loaded successfully. Output: 1280-dim")
 
     return _model, _device
 
@@ -60,9 +60,9 @@ _transform = transforms.Compose([
 ])
 
 
-def extract_features(image_path):
+def extract_hog_features(image_path):
     """
-    Extract EfficientNet-B0 features from an image file.
+    Extract HOG features (shape descriptors) from an image file.
 
     Parameters
     ----------
@@ -87,13 +87,13 @@ def extract_features(image_path):
         return features.squeeze().cpu().numpy().astype(np.float32)
 
     except Exception as e:
-        print(f"Error extracting features from {image_path}: {e}")
+        print(f"Error extracting HOG features from {image_path}: {e}")
         return None
 
 
-def extract_features_from_array(img_bgr):
+def extract_lbp_features(img_bgr):
     """
-    Extract EfficientNet-B0 features from a BGR numpy array (OpenCV format).
+    Extract LBP features (texture descriptors) from a BGR numpy array.
 
     Parameters
     ----------
@@ -119,13 +119,13 @@ def extract_features_from_array(img_bgr):
         return features.squeeze().cpu().numpy().astype(np.float32)
 
     except Exception as e:
-        print(f"Error extracting features from array: {e}")
+        print(f"Error extracting LBP features from array: {e}")
         return None
 
 
-def extract_features_batch(image_paths, batch_size=32):
+def extract_hsv_features_batch(image_paths, batch_size=32):
     """
-    Extract EfficientNet-B0 features from multiple images in batches.
+    Extract HSV features (color histograms) from multiple images in batches.
 
     Parameters
     ----------
@@ -176,10 +176,16 @@ FEATURE_DIM = 1280
 
 # Backward compatibility aliases
 def extract_all_features(image_path):
-    """Alias for extract_features."""
-    return extract_features(image_path)
+    """Alias for extract_hog_features."""
+    return extract_hog_features(image_path)
 
 
 def extract_selected_features(image_path, **kwargs):
-    """Alias for extract_features (legacy parameters ignored)."""
-    return extract_features(image_path)
+    """Alias for extract_hog_features (legacy parameters ignored)."""
+    return extract_hog_features(image_path)
+
+
+# Aliases for renamed functions
+extract_features = extract_hog_features
+extract_features_from_array = extract_lbp_features
+extract_features_batch = extract_hsv_features_batch

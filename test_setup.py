@@ -202,7 +202,7 @@ def test_feature_extraction():
     print("=" * 60)
 
     try:
-        from src.features.extractors import extract_features
+        from src.features.extractors import extract_hog_features
         import numpy as np
 
         # Find a test image
@@ -223,7 +223,7 @@ def test_feature_extraction():
             return True
 
         print(f"Using test image: {test_image.name}")
-        features = extract_features(str(test_image))
+        features = extract_hog_features(str(test_image))
 
         if features is None:
             print("[FAIL] Feature extraction returned None")

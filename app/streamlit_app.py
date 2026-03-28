@@ -1,20 +1,26 @@
 """
 Snake Species Identification and Safety Assistance
 -------------------------------------------------
-A Streamlit web application for snake classification using deep learning
-feature extraction (EfficientNet-B0) and Logistic Regression.
+A Streamlit web application for snake classification using classical
+feature extraction (HOG, LBP, HSV) and Logistic Regression.
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
 import streamlit as st
 import numpy as np
 from PIL import Image
 import glob
-from pathlib import Path
 
 # Import the classifier and utilities
 from src.inference.predictor import SnakeClassifier
-from src.utils.config import PROJECT_ROOT
+from src.utils.config import PROJECT_ROOT as CONFIG_PROJECT_ROOT
 
 
 # ============================================================
@@ -46,6 +52,7 @@ st.markdown("""
         padding: 1rem;
         margin: 1rem 0;
         border-radius: 5px;
+        color: #000000;
     }
     .prediction-box {
         background-color: #F5F5F5;
@@ -53,6 +60,15 @@ st.markdown("""
         margin: 0.5rem 0;
         border-radius: 8px;
         border-left: 4px solid #4CAF50;
+        color: #000000;
+    }
+    .prediction-box h3 {
+        color: inherit;
+        margin-top: 0;
+    }
+    .prediction-box p {
+        color: #000000;
+        margin: 0.5rem 0;
     }
     .stButton>button {
         width: 100%;
@@ -105,20 +121,21 @@ def get_reference_images(species_name, max_images=3):
         List of image file paths
     """
     # Path to reference images (using the data/snake_reference_images folder)
-    reference_dir = os.path.join(PROJECT_ROOT, "data", "snake_reference_images", species_name)
+    reference_dir = os.path.join(CONFIG_PROJECT_ROOT, "data", "snake_reference_images", species_name)
 
     if not os.path.exists(reference_dir):
         return []
 
-    # Get all image files
+    # Get all image files (use set to avoid duplicates from case-insensitive matching)
     image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']
-    image_files = []
+    image_files = set()
 
     for ext in image_extensions:
-        image_files.extend(glob.glob(os.path.join(reference_dir, ext)))
+        for f in glob.glob(os.path.join(reference_dir, ext)):
+            image_files.add(f)
 
-    # Return up to max_images
-    return sorted(image_files)[:max_images]
+    # Return up to max_images unique files
+    return sorted(list(image_files))[:max_images]
 
 
 # ============================================================
@@ -241,35 +258,20 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.header("⚙️ Settings")
 
-        # Model selection
-        model_type = st.selectbox(
-            "Select Model",
-            options=["logreg", "linearsvc"],
-            index=0,
-            help="LogReg generally performs better with 66.5% accuracy"
-        )
+        # Fixed model type (logreg has better accuracy)
+        model_type = "logreg"
 
-        # Confidence threshold
-        confidence_threshold = st.slider(
-            "Confidence Threshold",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.40,
-            step=0.05,
-            help="Minimum confidence required for prediction"
-        )
+        # Fixed confidence threshold
+        confidence_threshold = 0.40
 
-        st.markdown("---")
-
-        # About section
+        # Model Info section
         st.header("📊 Model Info")
-        st.info(f"""
-        **Model Type:** {model_type.upper()}
-        **Features:** EfficientNet-B0 (1280-dim)
-        **Accuracy:** {'66.5%' if model_type == 'logreg' else '62.0%'}
-        **Top-3 Accuracy:** {'90.5%' if model_type == 'logreg' else '83.0%'}
+        st.info("""
+        **Model Type:** LOGREG\n
+        **Features:** HOG+LBP+HSV (1280-dim)\n
+        **Accuracy:** 66.5%\n
+        **Top-3 Accuracy:** 90.5%\n
         **Classes:** 10 snake species
         """)
 
@@ -453,7 +455,7 @@ def main():
     st.markdown("---")
     st.markdown("""
         <div style="text-align: center; color: #666; padding: 1rem;">
-            <p><strong>Snake Species Classifier</strong> | Powered by EfficientNet-B0 & Logistic Regression</p>
+            <p><strong>Snake Species Classifier</strong> | Powered by HOG+LBP+HSV & Logistic Regression</p>
             <p>For educational and assistance purposes only. Not a substitute for professional wildlife expertise.</p>
         </div>
         """, unsafe_allow_html=True)

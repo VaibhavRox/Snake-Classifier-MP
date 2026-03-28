@@ -1,13 +1,13 @@
 """
 Snake Classifier Inference Module.
 
-Uses EfficientNet-B0 features + trained classifier for species identification.
+Uses HOG+LBP+HSV features + trained classifier for species identification.
 """
 
 import os
 import joblib
 import numpy as np
-from src.features.extractors import extract_features
+from src.features.extractors import extract_hog_features
 from src.utils.safety import check_safety
 from src.utils.config import ARTIFACTS_PATH
 
@@ -63,7 +63,7 @@ class SnakeClassifier:
             return {"error": "Model not loaded"}
 
         try:
-            features = extract_features(image_path)
+            features = extract_hog_features(image_path)
             if features is None:
                 return {"error": "Feature extraction failed"}
 

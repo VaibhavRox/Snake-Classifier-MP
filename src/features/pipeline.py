@@ -1,7 +1,7 @@
 """
-Feature Extraction Pipeline using EfficientNet-B0.
+Feature Extraction Pipeline using HOG, LBP, and HSV descriptors.
 
-Extracts 1280-dimensional features from images using pretrained EfficientNet-B0.
+Extracts 1280-dimensional features from images using combined texture, gradient, and color analysis.
 """
 
 import os
@@ -9,13 +9,13 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 from src.utils.config import DATASET_PATH, PROCESSED_DATA_PATH, FEATURE_DIM
-from src.features.extractors import extract_features, extract_features_from_array, extract_features_batch
+from src.features.extractors import extract_hog_features, extract_lbp_features, extract_hsv_features_batch
 from src.features.augmentation import generate_augmented_images
 
 
 def process_dataset(max_images_per_class=None, max_classes=None, use_batch=True, batch_size=32):
     """
-    Extract EfficientNet-B0 features from all images in the dataset.
+    Extract HOG+LBP+HSV features from all images in the dataset.
 
     Parameters
     ----------
@@ -35,7 +35,7 @@ def process_dataset(max_images_per_class=None, max_classes=None, use_batch=True,
     os.makedirs(PROCESSED_DATA_PATH, exist_ok=True)
 
     print(f"\n{'='*60}")
-    print(f"Feature Extraction: EfficientNet-B0 ({FEATURE_DIM}-dim)")
+    print(f"Feature Extraction: HOG+LBP+HSV ({FEATURE_DIM}-dim)")
     print(f"{'='*60}")
 
     # Collect species folders
@@ -78,8 +78,8 @@ def process_dataset(max_images_per_class=None, max_classes=None, use_batch=True,
 
     # Extract features
     if use_batch:
-        print(f"Extracting in batches (batch_size={batch_size})...")
-        features, failed = extract_features_batch(all_paths, batch_size=batch_size)
+        print(f"Extracting HOG features in batches (batch_size={batch_size})...")
+        features, failed = extract_hsv_features_batch(all_paths, batch_size=batch_size)
 
         if failed:
             print(f"Warning: {len(failed)} images failed")
@@ -98,7 +98,7 @@ def process_dataset(max_images_per_class=None, max_classes=None, use_batch=True,
         valid_labels = []
 
         for img_path, label in tqdm(zip(all_paths, all_labels), total=len(all_paths)):
-            feat = extract_features(img_path)
+            feat = extract_hog_features(img_path)
             if feat is not None:
                 features.append(feat)
                 valid_paths.append(img_path)

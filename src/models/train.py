@@ -1,5 +1,5 @@
 """
-Snake Classifier — Training Pipeline (EfficientNet-B0 Features)
+Snake Classifier — Training Pipeline (HOG+LBP+HSV Features)
 ================================================================
 
 Pipeline: Load -> Split -> Scale -> Tune -> Train -> Evaluate -> Save
@@ -28,7 +28,7 @@ from src.features.pipeline import process_dataset, load_features
 
 def load_data():
     """Load features, running extraction if needed."""
-    print("Loading EfficientNet-B0 features...")
+    print("Loading HOG+LBP+HSV features...")
 
     X, y, label_names, image_paths = load_features()
 
@@ -224,7 +224,7 @@ def run_training(model_type="linearsvc", run_tuning=True, run_cv=True):
 
 if __name__ == "__main__":
     print("\n" + "#"*60)
-    print("# SNAKE CLASSIFIER - EfficientNet-B0 Features")
+    print("# SNAKE CLASSIFIER - HOG+LBP+HSV Features")
     print("#"*60)
 
     results = {}
