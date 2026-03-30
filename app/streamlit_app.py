@@ -141,7 +141,7 @@ def get_reference_images(species_name, max_images=3):
 # ============================================================
 # 3. PREDICTION FUNCTION
 # ============================================================
-def predict_snake(classifier, image_path):
+def predict_snake(classifier, image_path, threshold=0.40):
     """
     Run prediction on uploaded image.
 
@@ -151,13 +151,15 @@ def predict_snake(classifier, image_path):
         The loaded classifier
     image_path : str
         Path to the image
+    threshold : float
+        Confidence threshold for classification (default: 0.40)
 
     Returns
     -------
     dict
         Prediction results containing top_3 and safety_message
     """
-    return classifier.predict(image_path)
+    return classifier.predict(image_path, threshold=threshold)
 
 
 # ============================================================
@@ -318,7 +320,7 @@ def main():
 
         # Run prediction
         with st.spinner("Analyzing image..."):
-            result = predict_snake(classifier, temp_path)
+            result = predict_snake(classifier, temp_path, threshold=confidence_threshold)
 
         # Clean up temp file
         if os.path.exists(temp_path):

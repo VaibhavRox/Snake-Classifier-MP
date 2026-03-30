@@ -53,9 +53,16 @@ class SnakeClassifier:
             print(f"Error: {e}")
             self.model = None
 
-    def predict(self, image_path):
+    def predict(self, image_path, threshold=0.4):
         """
         Run inference on an image.
+
+        Parameters
+        ----------
+        image_path : str
+            Path to the image file
+        threshold : float
+            Confidence threshold for classification (default: 0.4)
 
         Returns dict with top_3 predictions and safety_message.
         """
@@ -77,7 +84,7 @@ class SnakeClassifier:
             else:
                 return {"error": "Model does not support probabilities"}
 
-            top_3, safety_msg = check_safety(probs, self.label_names)
+            top_3, safety_msg = check_safety(probs, self.label_names, threshold=threshold)
             return {"top_3": top_3, "safety_message": safety_msg}
 
         except Exception as e:
