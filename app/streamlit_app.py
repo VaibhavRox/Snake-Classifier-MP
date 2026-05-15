@@ -69,8 +69,16 @@ st.markdown("""
     .prediction-box p {
         color: #000000;
         margin: 0.5rem 0;
-    }
-    .stButton>button {
+    }    .warning-badge {
+        display: inline-block;
+        background: #FFF3CD;
+        color: #856404;
+        border: 1px solid #FFECB5;
+        border-radius: 999px;
+        padding: 0.35rem 0.8rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+    }    .stButton>button {
         width: 100%;
         background-color: #4CAF50;
         color: white;
@@ -338,6 +346,10 @@ def main():
 
                 # Unknown threshold check
                 if is_unknown:
+                    st.markdown(
+                        '<div class="warning-badge">LOW CONFIDENCE</div>',
+                        unsafe_allow_html=True
+                    )
                     st.error("""
                     ### ⚠️ UNKNOWN SPECIES
 
